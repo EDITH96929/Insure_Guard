@@ -1,0 +1,27 @@
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Environment secrets
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.log
+.DS_Store
+Thumbs.db
+
+# Local database backups
+*.dump
+*.backup
+*.sql.gz
+
+# Generated raw datasets
+data/raw/
