@@ -1,13 +1,14 @@
 
+import json
 from pathlib import Path
 import sys
-import json
 
 from sqlalchemy import text
 
-# --------------------------------------------------
-# PROJECT PATH AND DATABASE CONNECTION
-# --------------------------------------------------
+
+# ==================================================
+# 1. PROJECT PATH AND DATABASE CONNECTION
+# ==================================================
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 SRC_DIR = BASE_DIR / "src"
@@ -17,29 +18,32 @@ sys.path.insert(0, str(SRC_DIR))
 from database.connection import engine
 
 
-# --------------------------------------------------
-# CONTROL DEFINITIONS
-# --------------------------------------------------
+SCHEMA = "insureguard"
+
+
+# ==================================================
+# 2. CONTROL DEFINITIONS
+# ==================================================
 
 CONTROLS = {
     "CT-001": {
         "name": "Payment Authorization Verification",
-        "description": (
-            "Every payment must have a valid approved authorization."
-        )
+        "severity": "CRITICAL"
     },
     "CT-002": {
         "name": "Duplicate Payment Detection",
-        "description": (
-            "Identify repeated payment transactions."
-        )
+        "severity": "HIGH"
+    },
+    "CT-003": {
+        "name": "Settlement Amount Verification",
+        "severity": "CRITICAL"
     }
 }
 
 
-# --------------------------------------------------
-# CREATE TEST RUN
-# --------------------------------------------------
+# ==================================================
+# 3. CREATE TEST RUN
+# ==================================================
 
 def create_test_run(connection):
 
@@ -60,7 +64,7 @@ def create_test_run(connection):
             RETURNING run_id
         """),
         {
-            "run_name": "Initial Payment Control Testing",
+            "run_name": "Insurance Payment Control Testing",
             "executed_by": "InsureGuard Control Engine",
             "source_batch_id": "TRANSACTION-BATCH-001"
         }
@@ -69,81 +73,9 @@ def create_test_run(connection):
     return result.scalar_one()
 
 
-# --------------------------------------------------
-# LOAD PAYMENT RECORDS FOR CT-001
-# --------------------------------------------------
-
-def get_authorization_results(connection):
-
-    return connection.execute(
-        text("""
-            SELECT
-                p.payment_id,
-                p.claim_id,
-                p.approval_id,
-                p.payment_amount,
-                p.payment_reference,
-                p.payment_status,
-                a.approval_status
-
-            FROM insureguard.payments p
-
-            LEFT JOIN insureguard.claim_approvals a
-                ON p.approval_id = a.approval_id
-                AND p.claim_id = a.claim_id
-
-            ORDER BY p.payment_id
-        """)
-    ).mappings().all()
-
-
-# --------------------------------------------------
-# LOAD PAYMENT RECORDS FOR CT-002
-# --------------------------------------------------
-
-def get_duplicate_results(connection):
-
-    return connection.execute(
-        text("""
-            SELECT
-                payment_id,
-                claim_id,
-                payment_reference,
-                payment_amount,
-                payment_status,
-                duplicate_number
-
-            FROM (
-                SELECT
-                    payment_id,
-                    claim_id,
-                    payment_reference,
-                    payment_amount,
-                    payment_status,
-
-                    ROW_NUMBER() OVER (
-                        PARTITION BY
-                            claim_id,
-                            payment_reference,
-                            payment_amount,
-                            payment_status
-
-                        ORDER BY payment_id
-                    ) AS duplicate_number
-
-                FROM insureguard.payments
-
-                WHERE payment_reference IS NOT NULL
-            ) payment_records
-
-            ORDER BY payment_id
-        """)
-    ).mappings().all()
-
-
-# --------------------------------------------------
-# SAVE TEST RESULT AND EXCEPTION
-# --------------------------------------------------
+# ==================================================
+# 4. SAVE TEST RESULT AND EXCEPTION
+# ==================================================
 
 def save_test_result(
     connection,
@@ -152,8 +84,7 @@ def save_test_result(
     claim_id,
     payment_id,
     result,
-    evidence,
-    severity
+    evidence
 ):
 
     test_result = connection.execute(
@@ -210,7 +141,7 @@ def save_test_result(
             {
                 "test_id": test_id,
                 "exception_type": control_id,
-                "severity": severity,
+                "severity": CONTROLS[control_id]["severity"],
                 "analyst_notes": (
                     "Automatically detected by InsureGuard. "
                     "Requires analyst investigation."
@@ -219,15 +150,36 @@ def save_test_result(
         )
 
 
-# --------------------------------------------------
-# EXECUTE CT-001
-# --------------------------------------------------
+# ==================================================
+# 5. CT-001 PAYMENT AUTHORIZATION VERIFICATION
+# ==================================================
 
 def run_ct001(connection, run_id):
 
-    print("\nExecuting CT-001: Payment Authorization Verification")
+    print(
+        "\nExecuting CT-001: Payment Authorization Verification"
+    )
 
-    records = get_authorization_results(connection)
+    records = connection.execute(
+        text("""
+            SELECT
+                p.payment_id,
+                p.claim_id,
+                p.approval_id,
+                p.payment_amount,
+                p.payment_reference,
+                p.payment_status,
+                a.approval_status
+
+            FROM insureguard.payments p
+
+            LEFT JOIN insureguard.claim_approvals a
+                ON p.approval_id = a.approval_id
+                AND p.claim_id = a.claim_id
+
+            ORDER BY p.payment_id
+        """)
+    ).mappings().all()
 
     passed = 0
     failed = 0
@@ -251,14 +203,13 @@ def run_ct001(connection, run_id):
         }
 
         save_test_result(
-            connection=connection,
-            run_id=run_id,
-            control_id="CT-001",
-            claim_id=payment["claim_id"],
-            payment_id=payment["payment_id"],
-            result=result,
-            evidence=evidence,
-            severity="CRITICAL"
+            connection,
+            run_id,
+            "CT-001",
+            payment["claim_id"],
+            payment["payment_id"],
+            result,
+            evidence
         )
 
         if result == "PASS":
@@ -273,22 +224,59 @@ def run_ct001(connection, run_id):
     return passed, failed
 
 
-# --------------------------------------------------
-# EXECUTE CT-002
-# --------------------------------------------------
+# ==================================================
+# 6. CT-002 DUPLICATE PAYMENT DETECTION
+# ==================================================
 
 def run_ct002(connection, run_id):
 
     print("\nExecuting CT-002: Duplicate Payment Detection")
 
-    records = get_duplicate_results(connection)
+    records = connection.execute(
+        text("""
+            SELECT
+                payment_id,
+                claim_id,
+                payment_reference,
+                payment_amount,
+                payment_status,
+                duplicate_number
+
+            FROM (
+                SELECT
+                    payment_id,
+                    claim_id,
+                    payment_reference,
+                    payment_amount,
+                    payment_status,
+
+                    ROW_NUMBER() OVER (
+                        PARTITION BY
+                            claim_id,
+                            payment_reference,
+                            payment_amount,
+                            payment_status
+
+                        ORDER BY payment_id
+                    ) AS duplicate_number
+
+                FROM insureguard.payments
+
+                WHERE payment_reference IS NOT NULL
+            ) payment_records
+
+            ORDER BY payment_id
+        """)
+    ).mappings().all()
 
     passed = 0
     failed = 0
 
     for payment in records:
 
-        is_duplicate = payment["duplicate_number"] > 1
+        is_duplicate = (
+            payment["duplicate_number"] > 1
+        )
 
         result = "FAIL" if is_duplicate else "PASS"
 
@@ -302,14 +290,13 @@ def run_ct002(connection, run_id):
         }
 
         save_test_result(
-            connection=connection,
-            run_id=run_id,
-            control_id="CT-002",
-            claim_id=payment["claim_id"],
-            payment_id=payment["payment_id"],
-            result=result,
-            evidence=evidence,
-            severity="HIGH"
+            connection,
+            run_id,
+            "CT-002",
+            payment["claim_id"],
+            payment["payment_id"],
+            result,
+            evidence
         )
 
         if result == "PASS":
@@ -324,9 +311,133 @@ def run_ct002(connection, run_id):
     return passed, failed
 
 
-# --------------------------------------------------
-# MAIN EXECUTION
-# --------------------------------------------------
+# ==================================================
+# 7. CT-003 SETTLEMENT AMOUNT VERIFICATION
+# ==================================================
+
+def run_ct003(connection, run_id):
+
+    print(
+        "\nExecuting CT-003: Settlement Amount Verification"
+    )
+
+    records = connection.execute(
+        text("""
+            WITH payment_dedup AS (
+
+                SELECT
+                    payment_id,
+                    claim_id,
+                    payment_reference,
+                    payment_amount,
+                    payment_status,
+
+                    ROW_NUMBER() OVER (
+                        PARTITION BY
+                            claim_id,
+                            payment_reference,
+                            payment_amount,
+                            payment_status
+
+                        ORDER BY payment_id
+                    ) AS duplicate_number
+
+                FROM insureguard.payments
+            ),
+
+            payment_totals AS (
+
+                SELECT
+                    claim_id,
+                    SUM(payment_amount) AS total_paid
+
+                FROM payment_dedup
+
+                WHERE payment_status = 'SUCCESSFUL'
+                  AND duplicate_number = 1
+
+                GROUP BY claim_id
+            )
+
+            SELECT
+                a.claim_id,
+                a.approval_id,
+                a.approved_amount,
+                COALESCE(p.total_paid, 0) AS total_paid
+
+            FROM insureguard.claim_approvals a
+
+            LEFT JOIN payment_totals p
+                ON a.claim_id = p.claim_id
+
+            WHERE a.approval_status = 'APPROVED'
+
+            ORDER BY a.claim_id
+        """)
+    ).mappings().all()
+
+    passed = 0
+    failed = 0
+
+    for record in records:
+
+        approved_amount = float(
+            record["approved_amount"]
+        )
+
+        total_paid = float(
+            record["total_paid"]
+        )
+
+        excess_amount = max(
+            total_paid - approved_amount,
+            0
+        )
+
+        is_overpayment = (
+            excess_amount > 0.01
+        )
+
+        result = (
+            "FAIL" if is_overpayment
+            else "PASS"
+        )
+
+        evidence = {
+            "claim_id": record["claim_id"],
+            "approval_id": record["approval_id"],
+            "approved_amount": approved_amount,
+            "total_successful_payment": total_paid,
+            "excess_amount": round(excess_amount, 2),
+            "currency": "INR",
+            "duplicate_transactions_excluded": True
+        }
+
+        save_test_result(
+            connection,
+            run_id,
+            "CT-003",
+            record["claim_id"],
+            None,
+            result,
+            evidence
+        )
+
+        if result == "PASS":
+            passed += 1
+        else:
+            failed += 1
+
+    print("Total tested:", len(records))
+    print("Passed:", passed)
+    print("Failed:", failed)
+
+    return passed, failed
+
+
+# ==================================================
+# 8. MAIN EXECUTION
+# ==================================================
 
 def main():
 
@@ -342,17 +453,32 @@ def main():
 
             print("\nTest Run ID:", run_id)
 
-            ct001 = run_ct001(connection, run_id)
+            ct001 = run_ct001(
+                connection,
+                run_id
+            )
 
-            ct002 = run_ct002(connection, run_id)
+            ct002 = run_ct002(
+                connection,
+                run_id
+            )
+
+            ct003 = run_ct003(
+                connection,
+                run_id
+            )
 
             connection.execute(
                 text("""
                     UPDATE insureguard.control_test_runs
+
                     SET run_status = 'COMPLETED'
+
                     WHERE run_id = :run_id
                 """),
-                {"run_id": run_id}
+                {
+                    "run_id": run_id
+                }
             )
 
         print("\n======================================")
@@ -374,8 +500,17 @@ def main():
         )
 
         print(
-            "\nExceptions created:",
-            ct001[1] + ct002[1]
+            "CT-003 | PASS:", ct003[0],
+            "| FAIL:", ct003[1]
+        )
+
+        total_exceptions = (
+            ct001[1] + ct002[1] + ct003[1]
+        )
+
+        print(
+            "\nTotal exceptions created:",
+            total_exceptions
         )
 
     except Exception as error:
