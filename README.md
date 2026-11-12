@@ -1,15 +1,26 @@
-**InsureGuard — Insurance Claims & Payment Risk Intelligence Platform**
+# INSUREGUARD
+### See the Risk. Trace the Exposure. Strengthen the Controls.
 
-Developed as an independent portfolio project to explore the intersection of data analytics, insurance operations, financial controls, and risk management.
+**An Insurance Claims & Payment Risk Intelligence Platform**
 
-**Technologies:** Python | PostgreSQL | SQL | Pandas | NumPy | Power BI
-# InsureGuard — Insurance Claims & Payment Risk Intelligence Platform
+An analytical platform designed to identify insurance payment-control exceptions, quantify potential financial exposure, and support risk-based investigations and remediation.
 
-**A data-driven risk and control monitoring platform for identifying insurance claims and payment exceptions, assessing financial exposure, and supporting risk-based investigations.**
+---
 
-> Project type: Portfolio Project  
-> Domain: Insurance | Risk Management | Internal Controls | Financial Analytics  
-> Technologies: Python, PostgreSQL, SQL, Pandas, NumPy, Power BI (planned)
+**Technology Stack**
+
+`Python` `PostgreSQL` `SQL` `Pandas` `NumPy` `Power BI (In Development)`
+
+**Project Snapshot**
+
+| 5,000 | 3 | 262 |
+|:---:|:---:|:---:|
+| Synthetic Claims | Automated Controls | Exceptions Identified |
+
+*Independent portfolio project using synthetic insurance data.*
+
+---
+
 
 ---
 
